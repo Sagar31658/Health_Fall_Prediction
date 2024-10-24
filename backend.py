@@ -4,9 +4,11 @@ import numpy as np
 import joblib
 import json
 import time
+from flask_cors import CORS
 
 app = Flask(__name__)
 
+CORS(app)
 # Load the trained Isolation Forest model and scaler
 iso_forest = joblib.load("isolation_forest_model_1_5_2.pkl")
 scaler = joblib.load("scaler_1_5_2.pkl")
