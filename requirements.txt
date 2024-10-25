@@ -1,6 +1,5 @@
 flask
 pandas
-random
 numpy
 scikit-learn
 joblib
