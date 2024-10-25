@@ -5,8 +5,6 @@ import joblib
 import json
 import time
 from flask_cors import CORS
-from flask_asgi import ASGIApp
-
 
 app = Flask(__name__)
 CORS(app)
@@ -274,5 +272,3 @@ def toggle_high_risk():
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
-
-asgi_app = ASGIApp(app)
