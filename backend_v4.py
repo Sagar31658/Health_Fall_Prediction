@@ -100,9 +100,10 @@ fall_trigger_prob = 0.05  # Reduced fall probability
 
 # Global variable to control high-risk mode
 high_risk_mode = False
+fall_records = []
 
 last_normal_values = [{} for _ in range(len(patient_names))]
-
+ 
 def get_area(x, y, z):
     for area, coords in areas.items():
         if coords["X"][0] <= x <= coords["X"][1] and \
@@ -111,6 +112,26 @@ def get_area(x, y, z):
             return area
     return random.choice(list(areas.keys()))
 
+def classify_fall(row):
+    gyro_threshold_forward = 20   # Threshold for forward fall (Gx)
+    gyro_threshold_backward = -20 # Threshold for backward fall (Gx)
+    gyro_threshold_left = 20      # Threshold for left side fall (Gy)
+    gyro_threshold_right = -20    # Threshold for right side fall (Gy)
+
+    if row['Gx'] > gyro_threshold_forward:
+        return 'Fall Forward'
+    elif row['Gx'] < gyro_threshold_backward:
+        return 'Fall Backward'
+    elif row['Gy'] > gyro_threshold_left:
+        return 'Fall Left Side'
+    elif row['Gy'] < gyro_threshold_right:
+        return 'Fall Right Side'
+    elif row['acc_mag'] > 15:  # Example threshold for fall detection based on acceleration magnitude
+        return 'Fall Detected (Acceleration)'
+    else:
+        return 'Did Not Fall'
+
+
 def generate_normal_data(ranges, patient_name, patient_id):
     global last_normal_values
 
@@ -118,6 +139,17 @@ def generate_normal_data(ranges, patient_name, patient_id):
     y = np.random.uniform(0, 100)
     z = np.random.uniform(0, 2)
     area = get_area(x, y, z)
+
+    Ax = np.random.uniform(-2, 2)  # Simulated accelerometer X-axis
+    Ay = np.random.uniform(-2, 2)  # Simulated accelerometer Y-axis
+    Az = np.random.uniform(-2, 2)  # Simulated accelerometer Z-axis
+    Gx = np.random.uniform(-30, 30)  # Simulated gyroscope X-axis (fall forward/backward)
+    Gy = np.random.uniform(-30, 30)  # Simulated gyroscope Y-axis (fall left/right)
+    Gz = np.random.uniform(-30, 30)  # Simulated gyroscope Z-axis
+    acc_mag = np.sqrt(Ax**2 + Ay**2 + Az**2)
+    fall_direction = classify_fall({'Gx': Gx, 'Gy': Gy, 'acc_mag': acc_mag})
+
+
 
     if len(last_normal_values) <= patient_id:
         last_normal_values.extend([{}] * (patient_id - len(last_normal_values) + 1))
@@ -156,9 +188,16 @@ def generate_normal_data(ranges, patient_name, patient_id):
         "X coords": x,
         "Y coords": y,
         "Z": z,
+        "Ax": Ax,
+        "Ay": Ay,
+        "Az": Az,
+        "Gx": Gx,
+        "Gy": Gy,
+        "Gz": Gz,
         "Area": area,
         "Anomaly": 0,
-        "Fall Indicator": 0
+        "Fall Indicator": 0,
+        "Fall Direction": fall_direction
     }
     last_normal_values[patient_id] = {feature: data[feature] for feature in features_to_use}
     return data
@@ -167,6 +206,16 @@ def generate_anomaly_data(patient_name):
     x = np.random.uniform(0, 100)
     y = np.random.uniform(0, 100)
     z = np.random.uniform(0, 2)
+
+    Ax = np.random.uniform(2, 5)  # Accelerometer X-axis
+    Ay = np.random.uniform(2, 5)  # Accelerometer Y-axis
+    Az = np.random.uniform(2, 5)  # Accelerometer Z-axis
+    Gx = np.random.uniform(-40, 40)  # Gyroscope X-axis (fall forward/backward)
+    Gy = np.random.uniform(-40, 40)  # Gyroscope Y-axis (fall left/right)
+    Gz = np.random.uniform(-40, 40)  # Gyroscope Z-axis
+    acc_mag = np.sqrt(Ax**2 + Ay**2 + Az**2)
+
+    fall_direction = classify_fall({'Gx': Gx, 'Gy': Gy, 'acc_mag': acc_mag})
 
     area = get_area(x, y, z)
     return {
@@ -184,8 +233,15 @@ def generate_anomaly_data(patient_name):
         "Y coords": y,
         "Z": z,
         "Area": area,
+        "Ax": Ax,
+        "Ay": Ay,
+        "Az": Az,
+        "Gx": Gx,
+        "Gy": Gy,
+        "Gz": Gz,
         "Anomaly": 1,
-        "Fall Indicator": 0
+        "Fall Indicator": 0,
+        "Fall Direction": fall_direction
     }
 
 
@@ -197,7 +253,7 @@ def detect_anomaly(data):
     return is_anomaly
 
 def stream_data_for_all_patients():
-    global high_risk_mode
+    global high_risk_mode,fall_records
 
     anomaly_block = 0
     fall_risk_counter = 0
@@ -250,6 +306,9 @@ def stream_data_for_all_patients():
             data["Patient ID"] = patient_id
             data["Timestamp"] = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
 
+            if data["Fall Indicator"] == 1:
+                fall_records.append(data)
+
             all_patient_data.append(data)
 
         # Yield the block of data for all patients together
@@ -259,6 +318,30 @@ def stream_data_for_all_patients():
 @app.route('/')
 def index():
     return "Hello, ASGI World!"
+
+def stream_fall_records():
+    global fall_records
+
+    last_sent_index = 0  # Track the last sent fall record index
+
+    while True:
+        # Check if there are new fall records to send
+        if len(fall_records) > last_sent_index:
+            # Get the new fall records
+            new_fall_records = fall_records[last_sent_index:]
+            last_sent_index = len(fall_records)
+
+            # Stream the new fall records
+            yield f"data:{json.dumps(new_fall_records)}\n\n"
+        
+        time.sleep(1)
+
+@app.route('/api/fall_records', methods=['GET'])
+def fall_records_stream():
+    """
+    API route to stream fall records in real-time using SSE.
+    """
+    return Response(stream_fall_records(), content_type='text/event-stream')
 
 @app.route('/api/data_stream', methods=['GET'])
 def data_stream():
