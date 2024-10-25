@@ -5,6 +5,7 @@ import joblib
 import json
 import time
 from flask_cors import CORS
+from asgiref.wsgi import WsgiToAsgi
 
 app = Flask(__name__)
 CORS(app)
@@ -254,6 +255,10 @@ def stream_data_for_all_patients():
         yield f"data:{json.dumps(all_patient_data)}\n\n"
         time.sleep(1)
 
+@app.route('/')
+def index():
+    return "Hello, ASGI World!"
+
 @app.route('/api/data_stream', methods=['GET'])
 def data_stream():
     return Response(stream_data_for_all_patients(), content_type='text/event-stream')
@@ -269,6 +274,8 @@ def toggle_high_risk():
         return jsonify({"message": f"High-risk mode {status}."}), 200
     else:
         return jsonify({"error": "Missing 'enable' parameter."}), 400
+    
+asgi_app = WsgiToAsgi(app)
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True)
