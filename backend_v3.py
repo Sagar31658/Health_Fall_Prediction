@@ -117,6 +117,9 @@ def generate_normal_data(ranges, patient_name, patient_id):
     z = np.random.uniform(0, 2)
     area = get_area(x, y, z)
 
+    if len(last_normal_values) <= patient_id:
+        last_normal_values.extend([{}] * (patient_id - len(last_normal_values) + 1))
+
     # Generate fluctuating values close to the last normal value
     def get_fluctuated_value(feature, min_range, max_range, last_value):
         if last_value is None:
@@ -219,7 +222,7 @@ def stream_data_for_all_patients():
                     data = generate_anomaly_data(patient_name)
                     fall_risk_counter = 0
                 else:
-                    data = generate_normal_data(ranges, patient_name)
+                    data = generate_normal_data(ranges, patient_name, patient_id)
                     fall_risk_counter = 0
 
             # Detect anomaly using Isolation Forest
